@@ -12,16 +12,28 @@
 RTCManager rtc;
 DisplayManager display;
 VitalsManager vitals;
-
 ServoDispenser dispenser(SERVO1_PIN, SERVO2_PIN);
 DropSensor drop(DROP_SENSOR_PIN);
-
 BatchManager batchManager(&dispenser,&drop);
-
 ScheduleManager scheduleManager;
+MedicineSchedule dueSchedule;
+TrayBatch batch;
 
 char timeBuffer[10];
 char nextDoseBuffer[6];
+bool dispenseResult = false;
+
+enum SystemState
+{
+    STANDBY,
+    WAIT_FINGER,
+    READING_VITALS,
+    DISPENSING,
+    RESULT,
+    BLOCKED
+};
+
+SystemState state = STANDBY;
 
 void setup()
 {
@@ -56,72 +68,60 @@ Serial.println("System Ready");
 void loop()
 {
 
-rtc.getCurrentTime(timeBuffer);
-
-MedicineSchedule next;
-
-if(scheduleManager.getNextSchedule(rtc,next))
+switch(state)
 {
-    sprintf(nextDoseBuffer,"%02d:%02d",
-            next.hour,
-            next.minute);
 
-    display.showStandby(timeBuffer,nextDoseBuffer);
+case STANDBY:
+{
+
+    rtc.getCurrentTime(timeBuffer);
+
+    MedicineSchedule next;
+
+    if(scheduleManager.getNextSchedule(rtc,next))
+    {
+        sprintf(nextDoseBuffer,"%02d:%02d",
+                next.hour,
+                next.minute);
+
+        display.showStandby(timeBuffer,nextDoseBuffer);
+    }
+
+    if(scheduleManager.checkSchedule(rtc,dueSchedule))
+    {
+        state = WAIT_FINGER;
+    }
+
 }
+break;
 
-MedicineSchedule due;
-
-if(scheduleManager.checkSchedule(rtc,due))
+case WAIT_FINGER:
 {
 
     display.showPlaceFinger();
+    delay(1000);
 
-    bool safe = false;
+    state = READING_VITALS;
 
-    while(true)
-    {
+}
+break;
 
-        if(Serial.available())
-        {
+case READING_VITALS:
+{
+    display.showMessage("Reading Vitals","Please Wait");
+    bool safe = vitals.readVitals();
 
-            char cmd = Serial.read();
-
-            if(cmd=='V')
-            {
-                vitals.setVitals(true);
-                safe = true;
-                break;
-            }
-
-            if(cmd=='X')
-            {
-                vitals.setVitals(false);
-                break;
-            }
-
-        }
-
-    }
-
-    if(vitals.vitalsSafe())
+    if(safe)
     {
 
         display.showVitalsSafe();
 
-        TrayBatch batch;
+        batch.trayA = dueSchedule.trayA;
+        batch.trayB = dueSchedule.trayB;
+        batch.trayC = dueSchedule.trayC;
+        batch.trayD = dueSchedule.trayD;
 
-        batch.trayA = due.trayA;
-        batch.trayB = due.trayB;
-        batch.trayC = due.trayC;
-        batch.trayD = due.trayD;
-
-        bool result =
-            batchManager.dispenseBatch(batch);
-
-        if(result)
-            display.showDispensed();
-        else
-            display.showMessage("Dispense","Failed");
+        state = DISPENSING;
 
     }
     else
@@ -129,10 +129,59 @@ if(scheduleManager.checkSchedule(rtc,due))
 
         display.showVitalsUnsafe();
 
+        state = BLOCKED;
+
     }
 
 }
+break;
 
-delay(1000);
+case DISPENSING:
+{
+
+    dispenseResult = batchManager.dispenseBatch(batch);
+
+    state = RESULT;
+
+}
+break;
+
+case RESULT:
+{
+
+    if(dispenseResult)
+        display.showDispensed();
+    else
+        display.showMessage("Dispense","Failed");
+
+    delay(3000);
+
+    state = STANDBY;
+
+}
+break;
+
+case BLOCKED:
+{
+
+    // waiting for reset from webapp
+    if(Serial.available())
+    {
+
+        char cmd = Serial.read();
+
+        if(cmd=='R')
+        {
+            state = STANDBY;
+        }
+
+    }
+
+}
+break;
+
+}
+
+delay(200);
 
 }
