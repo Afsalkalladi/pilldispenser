@@ -26,6 +26,35 @@ void ScheduleManager::addSchedule(int hour, int minute,
     scheduleCount++;
 }
 
+bool ScheduleManager::removeSchedule(int index)
+{
+    if(index < 0 || index >= scheduleCount)
+        return false;
+
+    for(int i = index; i < scheduleCount - 1; i++)
+    {
+        schedules[i] = schedules[i+1];
+    }
+
+    scheduleCount--;
+    return true;
+}
+
+void ScheduleManager::clearSchedules()
+{
+    scheduleCount = 0;
+}
+
+int ScheduleManager::getScheduleCount()
+{
+    return scheduleCount;
+}
+
+MedicineSchedule ScheduleManager::getSchedule(int index)
+{
+    return schedules[index];
+}
+
 bool ScheduleManager::checkSchedule(RTCManager &rtc,
                                     MedicineSchedule &dueSchedule)
 {

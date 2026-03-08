@@ -16,7 +16,10 @@ public:
 
     void getCurrentTime(char *buffer);
 
-    DateTime getNow();   // NEW: return raw RTC time
+    DateTime getNow();
+
+    void setTime(int year, int month, int day,
+                 int hour, int minute, int second);
 
 };
 

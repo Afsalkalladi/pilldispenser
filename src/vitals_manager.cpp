@@ -10,7 +10,7 @@ void VitalsManager::begin()
         while(1);
     }
 
-    byte ledBrightness = 60; 
+    byte ledBrightness = 60;
     byte sampleAverage = 4;
     byte ledMode = 2;          // Red + IR
     int sampleRate = 100;      // 100 Hz
@@ -18,6 +18,11 @@ void VitalsManager::begin()
     int adcRange = 16384;
 
     sensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange);
+
+    heartRate = 0;
+    spo2 = 0;
+    safeStatus = false;
+
     Serial.println("MAX30102 Ready");
 }
 
@@ -91,8 +96,6 @@ bool VitalsManager::readVitals()
     long avgIR  = irSum  / samples;
     long avgRed = redSum / samples;
 
-    /* --- TEMPORARY ESTIMATION --- */
-
     heartRate = map(avgIR, 20000, 100000, 60, 90);
     spo2      = map(avgRed,20000,100000,94,99);
 
@@ -112,8 +115,6 @@ bool VitalsManager::readVitals()
 
     Serial.println("-----------------------");
 
-    /* --- Safety thresholds --- */
-
     if(heartRate > 45 && heartRate < 130 && spo2 > 88)
     {
         Serial.println("Vitals SAFE");
@@ -127,4 +128,19 @@ bool VitalsManager::readVitals()
 
     return safeStatus;
 
+}
+
+int VitalsManager::getHeartRate()
+{
+    return heartRate;
+}
+
+int VitalsManager::getSpO2()
+{
+    return spo2;
+}
+
+bool VitalsManager::vitalsSafe()
+{
+    return safeStatus;
 }

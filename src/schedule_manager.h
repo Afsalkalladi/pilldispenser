@@ -35,6 +35,14 @@ public:
     void addSchedule(int hour, int minute,
                      int a, int b, int c, int d);
 
+    bool removeSchedule(int index);
+
+    void clearSchedules();
+
+    int getScheduleCount();
+
+    MedicineSchedule getSchedule(int index);
+
     bool checkSchedule(RTCManager &rtc,
                        MedicineSchedule &dueSchedule);
 

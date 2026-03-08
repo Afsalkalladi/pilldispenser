@@ -23,6 +23,9 @@ public:
 
     bool vitalsSafe();
 
+    int getHeartRate();
+    int getSpO2();
+
 };
 
 #endif
