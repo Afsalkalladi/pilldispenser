@@ -12,8 +12,8 @@ void ServoDispenser::begin()
     servo1.attach(pin1);
     servo2.attach(pin2);
 
-    servo1.write(idleAngle);
-    servo2.write(idleAngle);
+    servo1.write(idleAngle1);
+    servo2.write(idleAngle2);
 }
 
 void ServoDispenser::dispense(Tray tray)
@@ -26,7 +26,7 @@ void ServoDispenser::dispense(Tray tray)
 
             servo1.write(0);
             delay(1500);
-            servo1.write(idleAngle);
+            servo1.write(idleAngle1);
 
         break;
 
@@ -35,7 +35,7 @@ void ServoDispenser::dispense(Tray tray)
 
             servo1.write(90);
             delay(1500);
-            servo1.write(idleAngle);
+            servo1.write(idleAngle1);
 
         break;
 
@@ -44,7 +44,7 @@ void ServoDispenser::dispense(Tray tray)
 
             servo2.write(0);
             delay(1500);
-            servo2.write(idleAngle);
+            servo2.write(idleAngle2);
 
         break;
 
@@ -53,7 +53,7 @@ void ServoDispenser::dispense(Tray tray)
 
             servo2.write(90);
             delay(1500);
-            servo2.write(idleAngle);
+            servo2.write(idleAngle2);
 
         break;
     }
