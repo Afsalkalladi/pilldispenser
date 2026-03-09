@@ -24,7 +24,7 @@ void ServoDispenser::dispense(Tray tray)
 
         case TRAY_A:
 
-            servo1.write(0);
+            servo1.write(45);
             delay(1500);
             servo1.write(idleAngle1);
 
@@ -33,7 +33,7 @@ void ServoDispenser::dispense(Tray tray)
 
         case TRAY_B:
 
-            servo1.write(90);
+            servo1.write(145);
             delay(1500);
             servo1.write(idleAngle1);
 
@@ -42,7 +42,7 @@ void ServoDispenser::dispense(Tray tray)
 
         case TRAY_C:
 
-            servo2.write(0);
+            servo2.write(35);
             delay(1500);
             servo2.write(idleAngle2);
 
@@ -51,7 +51,7 @@ void ServoDispenser::dispense(Tray tray)
 
         case TRAY_D:
 
-            servo2.write(90);
+            servo2.write(135);
             delay(1500);
             servo2.write(idleAngle2);
 

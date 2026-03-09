@@ -21,8 +21,8 @@ private:
     int pin1;
     int pin2;
 
-    int idleAngle1 = 45;   // Idle angle for servo1 (Tray A & B)
-    int idleAngle2 = 45;   // Idle angle for servo2 (Tray C & D)
+    int idleAngle1 = 90;   // Idle angle for servo1 (Tray A & B)
+    int idleAngle2 = 90;   // Idle angle for servo2 (Tray C & D)
 
 public:
 
