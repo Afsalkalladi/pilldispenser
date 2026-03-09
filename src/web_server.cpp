@@ -19,6 +19,10 @@ const char* stateToString(SystemState s)
     }
 }
 
+// Buffer to hold incoming POST body (shared, only one POST at a time)
+static char bodyBuf[512];
+static size_t bodyLen = 0;
+
 void setupWebServer()
 {
     // CORS headers for all responses
@@ -35,7 +39,7 @@ void setupWebServer()
         }
     });
 
-    // GET /status
+    // GET /status (includes schedules)
     server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request){
 
         JsonDocument doc;
@@ -72,12 +76,28 @@ void setupWebServer()
             nextDose["trayD"] = next.trayD;
         }
 
+        // Include schedules in status to reduce poll requests
+        JsonArray schArr = doc["schedules"].to<JsonArray>();
+        for(int i = 0; i < scheduleManager.getScheduleCount(); i++)
+        {
+            MedicineSchedule s = scheduleManager.getSchedule(i);
+            JsonObject obj = schArr.add<JsonObject>();
+            obj["index"] = i;
+            obj["hour"] = s.hour;
+            obj["minute"] = s.minute;
+            obj["trayA"] = s.trayA;
+            obj["trayB"] = s.trayB;
+            obj["trayC"] = s.trayC;
+            obj["trayD"] = s.trayD;
+            obj["enabled"] = s.enabled;
+        }
+
         String response;
         serializeJson(doc, response);
         request->send(200, "application/json", response);
     });
 
-    // GET /schedules
+    // GET /schedules (kept for compatibility)
     server.on("/schedules", HTTP_GET, [](AsyncWebServerRequest *request){
 
         JsonDocument doc;
@@ -102,13 +122,18 @@ void setupWebServer()
         request->send(200, "application/json", response);
     });
 
-    // POST /schedules
+    // POST /schedules - collect body then handle in request callback
     server.on("/schedules", HTTP_POST, [](AsyncWebServerRequest *request){
-        request->send(400, "application/json", "{\"error\":\"Body required\"}");
-    }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+
+        if(bodyLen == 0)
+        {
+            request->send(400, "application/json", "{\"error\":\"Body required\"}");
+            return;
+        }
 
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, data, len);
+        DeserializationError error = deserializeJson(doc, bodyBuf, bodyLen);
+        bodyLen = 0;
 
         if(error)
         {
@@ -140,6 +165,16 @@ void setupWebServer()
         Serial.printf("Schedule added: %02d:%02d A%d B%d C%d D%d\n", hour, minute, tA, tB, tC, tD);
 
         request->send(201, "application/json", "{\"success\":true}");
+
+    }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+        // Store body data for request handler to use
+        if(index == 0) bodyLen = 0;
+        if(bodyLen + len < sizeof(bodyBuf))
+        {
+            memcpy(bodyBuf + bodyLen, data, len);
+            bodyLen += len;
+            bodyBuf[bodyLen] = 0;
+        }
     });
 
     // DELETE /schedules?index=N or DELETE /schedules?all=1
@@ -174,11 +209,16 @@ void setupWebServer()
 
     // POST /schedules/toggle
     server.on("/schedules/toggle", HTTP_POST, [](AsyncWebServerRequest *request){
-        request->send(400, "application/json", "{\"error\":\"Body required\"}");
-    }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+
+        if(bodyLen == 0)
+        {
+            request->send(400, "application/json", "{\"error\":\"Body required\"}");
+            return;
+        }
 
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, data, len);
+        DeserializationError error = deserializeJson(doc, bodyBuf, bodyLen);
+        bodyLen = 0;
 
         if(error)
         {
@@ -196,18 +236,23 @@ void setupWebServer()
         {
             request->send(404, "application/json", "{\"error\":\"Invalid index\"}");
         }
+
+    }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+        if(index == 0) bodyLen = 0;
+        if(bodyLen + len < sizeof(bodyBuf))
+        {
+            memcpy(bodyBuf + bodyLen, data, len);
+            bodyLen += len;
+            bodyBuf[bodyLen] = 0;
+        }
     });
 
-    // POST /reset
+    // POST /reset - no body needed
     server.on("/reset", HTTP_POST, [](AsyncWebServerRequest *request){
 
         if(state != BLOCKED)
         {
-            JsonDocument doc;
-            doc["error"] = String("Device is in ") + stateToString(state) + " state. Reset only available when BLOCKED.";
-            String resp;
-            serializeJson(doc, resp);
-            request->send(400, "application/json", resp);
+            request->send(400, "application/json", "{\"error\":\"Device not in BLOCKED state\"}");
             return;
         }
 
@@ -219,21 +264,23 @@ void setupWebServer()
 
     // POST /manual-dispense
     server.on("/manual-dispense", HTTP_POST, [](AsyncWebServerRequest *request){
-        request->send(400, "application/json", "{\"error\":\"Body required\"}");
-    }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+
+        if(bodyLen == 0)
+        {
+            request->send(400, "application/json", "{\"error\":\"Body required\"}");
+            return;
+        }
 
         if(state != STANDBY)
         {
-            JsonDocument doc;
-            doc["error"] = String("Device is in ") + stateToString(state) + " state. Manual dispense only in STANDBY.";
-            String resp;
-            serializeJson(doc, resp);
-            request->send(400, "application/json", resp);
+            bodyLen = 0;
+            request->send(400, "application/json", "{\"error\":\"Device not in STANDBY state\"}");
             return;
         }
 
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, data, len);
+        DeserializationError error = deserializeJson(doc, bodyBuf, bodyLen);
+        bodyLen = 0;
 
         if(error)
         {
@@ -258,15 +305,29 @@ void setupWebServer()
             manualBatch.trayA, manualBatch.trayB, manualBatch.trayC, manualBatch.trayD);
 
         request->send(200, "application/json", "{\"success\":true,\"message\":\"Manual dispense initiated\"}");
+
+    }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+        if(index == 0) bodyLen = 0;
+        if(bodyLen + len < sizeof(bodyBuf))
+        {
+            memcpy(bodyBuf + bodyLen, data, len);
+            bodyLen += len;
+            bodyBuf[bodyLen] = 0;
+        }
     });
 
     // POST /sync-time
     server.on("/sync-time", HTTP_POST, [](AsyncWebServerRequest *request){
-        request->send(400, "application/json", "{\"error\":\"Body required\"}");
-    }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+
+        if(bodyLen == 0)
+        {
+            request->send(400, "application/json", "{\"error\":\"Body required\"}");
+            return;
+        }
 
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, data, len);
+        DeserializationError error = deserializeJson(doc, bodyBuf, bodyLen);
+        bodyLen = 0;
 
         if(error)
         {
@@ -287,18 +348,23 @@ void setupWebServer()
             year, month, day, hour, minute, second);
 
         request->send(200, "application/json", "{\"success\":true,\"message\":\"Device clock synced\"}");
+
+    }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+        if(index == 0) bodyLen = 0;
+        if(bodyLen + len < sizeof(bodyBuf))
+        {
+            memcpy(bodyBuf + bodyLen, data, len);
+            bodyLen += len;
+            bodyBuf[bodyLen] = 0;
+        }
     });
 
-    // POST /read-vitals
+    // POST /read-vitals - no body needed
     server.on("/read-vitals", HTTP_POST, [](AsyncWebServerRequest *request){
 
         if(state != STANDBY)
         {
-            JsonDocument doc;
-            doc["error"] = String("Device is in ") + stateToString(state) + " state. Vitals reading only in STANDBY.";
-            String resp;
-            serializeJson(doc, resp);
-            request->send(400, "application/json", resp);
+            request->send(400, "application/json", "{\"error\":\"Device not in STANDBY state\"}");
             return;
         }
 
@@ -339,11 +405,16 @@ void setupWebServer()
 
     // POST /trays/refill
     server.on("/trays/refill", HTTP_POST, [](AsyncWebServerRequest *request){
-        request->send(400, "application/json", "{\"error\":\"Body required\"}");
-    }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+
+        if(bodyLen == 0)
+        {
+            request->send(400, "application/json", "{\"error\":\"Body required\"}");
+            return;
+        }
 
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, data, len);
+        DeserializationError error = deserializeJson(doc, bodyBuf, bodyLen);
+        bodyLen = 0;
 
         if(error)
         {
@@ -366,6 +437,15 @@ void setupWebServer()
         Serial.printf("Tray %s refilled to %d\n", tray, TRAY_CAPACITY);
 
         request->send(200, "application/json", "{\"success\":true}");
+
+    }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+        if(index == 0) bodyLen = 0;
+        if(bodyLen + len < sizeof(bodyBuf))
+        {
+            memcpy(bodyBuf + bodyLen, data, len);
+            bodyLen += len;
+            bodyBuf[bodyLen] = 0;
+        }
     });
 
     // Serve SPA from LittleFS (index.html or index.html.gz)

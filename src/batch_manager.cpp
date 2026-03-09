@@ -47,6 +47,7 @@ bool BatchManager::dispenseBatch(TrayBatch batch)
     while(millis() - start < 5000)
     {
         sensor->update();
+        yield();  // prevent watchdog reset
     }
 
     if(sensor->pillDetected())

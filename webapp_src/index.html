@@ -241,6 +241,8 @@ let alertId=0;
 let alertFilter='all';
 let pollTimer=null;
 let editingScheduleIndex=-1;
+let polling=false;  // guard against overlapping polls
+let busy=false;     // true during user actions - pauses polling
 
 const TRAY_CAPACITY=30;
 const TRAY_LOW=5;
@@ -248,11 +250,12 @@ const TRAY_LETTERS=['A','B','C','D'];
 const TRAY_COLORS={A:'var(--medical)',B:'var(--safe)',C:'#8b5cf6',D:'#f97316'};
 
 // === API ===
-async function api(method,path,body){
+async function api(method,path,body,timeout){
+  timeout=timeout||10000;
   const opts={method,headers:{}};
   if(body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
   const c=new AbortController();
-  const t=setTimeout(()=>c.abort(),5000);
+  const t=setTimeout(()=>c.abort(),timeout);
   opts.signal=c.signal;
   try{
     const r=await fetch(path,opts);
@@ -265,21 +268,54 @@ async function api(method,path,body){
 
 // === Polling ===
 async function poll(){
+  if(polling||busy)return;
+  polling=true;
   try{
-    const [s,sc]=await Promise.all([api('GET','/status'),api('GET','/schedules')]);
+    // Single request - /status now includes schedules
+    const s=await api('GET','/status');
     status=s;
-    schedules=sc;
+    schedules=s.schedules||[];
     generateAlerts();
-    render();
+    // Don't re-render controls (has form inputs) or schedules (if modal is open)
+    const modalOpen=document.getElementById('modal-overlay').classList.contains('show');
+    if(currentPage==='controls'){
+      updateControlsLive();
+    }else if(currentPage==='schedules'&&modalOpen){
+      // skip render while modal is open
+    }else{
+      render();
+    }
   }catch(e){
-    if(!status)render();
+    // Silent fail on poll - don't spam error toasts
+    if(!status){
+      document.getElementById('content').innerHTML=
+        '<div class="text-center" style="padding:3rem;color:var(--text-light)"><div class="pulse">Connecting to device...</div></div>';
+    }
+  }finally{
+    polling=false;
+  }
+}
+
+// Run a user action: pauses polling, runs the action, then resumes
+async function doAction(fn,longWait){
+  busy=true;
+  try{
+    await fn();
+    // Wait for ESP32 to finish processing before polling
+    // longWait for dispense/vitals which block the ESP32 for seconds
+    await new Promise(r=>setTimeout(r,longWait?2000:500));
+    // Force a fresh poll after action
+    polling=false;
+    await poll();
+  }finally{
+    busy=false;
   }
 }
 
 function startPolling(){
   poll();
   if(pollTimer)clearInterval(pollTimer);
-  pollTimer=setInterval(poll,3000);
+  pollTimer=setInterval(poll,5000);
 }
 
 // === Alerts ===
@@ -476,16 +512,20 @@ function attachScheduleHandlers(){
   document.querySelectorAll('[data-toggle]').forEach(el=>{
     el.addEventListener('change',async function(){
       const idx=parseInt(this.dataset.toggle);
-      try{await api('POST','/schedules/toggle',{index:idx});await poll();showToast('Schedule updated');}
-      catch(e){showToast(e.message,'error');await poll();}
+      doAction(async()=>{
+        await api('POST','/schedules/toggle',{index:idx});
+        showToast('Schedule updated');
+      }).catch(e=>showToast(e.message,'error'));
     });
   });
   document.querySelectorAll('[data-delete]').forEach(el=>{
     el.addEventListener('click',async function(){
       const idx=parseInt(this.dataset.delete);
       if(!confirm('Delete this schedule?'))return;
-      try{await api('DELETE','/schedules?index='+idx);await poll();showToast('Schedule deleted');}
-      catch(e){showToast(e.message,'error');}
+      doAction(async()=>{
+        await api('DELETE','/schedules?index='+idx);
+        showToast('Schedule deleted');
+      }).catch(e=>showToast(e.message,'error'));
     });
   });
 }
@@ -525,15 +565,16 @@ function openScheduleModal(idx){
       trayD:parseInt(document.getElementById('sf-d').value)||0
     };
     if(data.trayA+data.trayB+data.trayC+data.trayD===0){showToast('At least one tray must have pills','error');return;}
-    try{
+    doAction(async()=>{
       if(editingScheduleIndex>=0){
         await api('DELETE','/schedules?index='+editingScheduleIndex);
+        // Wait for ESP32 to process delete before adding
+        await new Promise(r=>setTimeout(r,200));
       }
       await api('POST','/schedules',data);
       closeModal();
-      await poll();
       showToast(editingScheduleIndex>=0?'Schedule updated':'Schedule added');
-    }catch(e){showToast(e.message,'error');}
+    }).catch(e=>showToast(e.message,'error'));
   });
 }
 
@@ -566,7 +607,7 @@ function renderControls(){
       <div class="card">
         <div class="card-title">Sync Device Clock</div>
         <div style="font-size:.875rem;margin-bottom:.75rem">
-          <div class="flex justify-between mb-4"><span style="color:var(--text-light)">Device:</span><span style="font-weight:600">${s?s.deviceTime:'--:--:--'}</span></div>
+          <div class="flex justify-between mb-4"><span style="color:var(--text-light)">Device:</span><span style="font-weight:600" id="controls-device-time">${s?s.deviceTime:'--:--:--'}</span></div>
           <div class="flex justify-between mb-4"><span style="color:var(--text-light)">Browser:</span><span style="font-weight:600" id="browser-time">${new Date().toLocaleTimeString()}</span></div>
         </div>
         <button class="btn btn-primary btn-block" id="btn-sync">Sync Clock</button>
@@ -575,14 +616,35 @@ function renderControls(){
     </div>`;
 }
 
+// Light update for controls page - only updates state banner and button states, not form inputs
+function updateControlsLive(){
+  if(!status)return;
+  const si=getStateInfo(status.state);
+  const banner=document.querySelector('.state-banner');
+  if(banner){
+    banner.className='state-banner '+si.cls+' mb-6';
+    banner.innerHTML='<div><span class="dot '+si.dot+'"></span>Current State: '+si.label+'</div>';
+  }
+  const br=document.getElementById('btn-reset');
+  if(br)br.disabled=status.state!=='BLOCKED';
+  const bd=document.getElementById('btn-dispense');
+  if(bd)bd.disabled=status.state!=='STANDBY';
+  const bv=document.getElementById('btn-vitals');
+  if(bv)bv.disabled=status.state!=='STANDBY';
+  const dt=document.querySelector('#controls-device-time');
+  if(dt)dt.textContent=status.deviceTime||'--:--:--';
+}
+
 function attachControlHandlers(){
   const br=document.getElementById('btn-reset');
-  if(br)br.addEventListener('click',async()=>{
-    try{await api('POST','/reset');showToast('Device reset to STANDBY');await poll();}
-    catch(e){showToast(e.message,'error');}
+  if(br)br.addEventListener('click',()=>{
+    doAction(async()=>{
+      await api('POST','/reset');
+      showToast('Device reset to STANDBY');
+    }).catch(e=>showToast(e.message,'error'));
   });
   const bd=document.getElementById('btn-dispense');
-  if(bd)bd.addEventListener('click',async()=>{
+  if(bd)bd.addEventListener('click',()=>{
     const data={
       trayA:parseInt(document.getElementById('md-a').value)||0,
       trayB:parseInt(document.getElementById('md-b').value)||0,
@@ -590,21 +652,25 @@ function attachControlHandlers(){
       trayD:parseInt(document.getElementById('md-d').value)||0
     };
     if(data.trayA+data.trayB+data.trayC+data.trayD===0){showToast('Enter at least one pill','error');return;}
-    try{await api('POST','/manual-dispense',data);showToast('Dispensing...');await poll();}
-    catch(e){showToast(e.message,'error');}
+    doAction(async()=>{
+      await api('POST','/manual-dispense',data);
+      showToast('Dispensing...');
+    },true).catch(e=>showToast(e.message,'error'));
   });
   const bs=document.getElementById('btn-sync');
-  if(bs)bs.addEventListener('click',async()=>{
+  if(bs)bs.addEventListener('click',()=>{
     const now=new Date();
-    try{
+    doAction(async()=>{
       await api('POST','/sync-time',{year:now.getFullYear(),month:now.getMonth()+1,day:now.getDate(),hour:now.getHours(),minute:now.getMinutes(),second:now.getSeconds()});
-      showToast('Clock synced');await poll();
-    }catch(e){showToast(e.message,'error');}
+      showToast('Clock synced');
+    }).catch(e=>showToast(e.message,'error'));
   });
   const bv=document.getElementById('btn-vitals');
-  if(bv)bv.addEventListener('click',async()=>{
-    try{await api('POST','/read-vitals');showToast('Vitals reading initiated...');await poll();}
-    catch(e){showToast(e.message,'error');}
+  if(bv)bv.addEventListener('click',()=>{
+    doAction(async()=>{
+      await api('POST','/read-vitals');
+      showToast('Vitals reading initiated...');
+    },true).catch(e=>showToast(e.message,'error'));
   });
   // Update browser time every second
   setInterval(()=>{const el=document.getElementById('browser-time');if(el)el.textContent=new Date().toLocaleTimeString();},1000);
@@ -641,8 +707,10 @@ function attachTrayHandlers(){
   document.querySelectorAll('[data-refill]').forEach(el=>{
     el.addEventListener('click',async function(){
       const tray=this.dataset.refill;
-      try{await api('POST','/trays/refill',{tray});showToast('Tray '+tray+' refilled');await poll();}
-      catch(e){showToast(e.message,'error');}
+      doAction(async()=>{
+        await api('POST','/trays/refill',{tray});
+        showToast('Tray '+tray+' refilled');
+      }).catch(e=>showToast(e.message,'error'));
     });
   });
 }
