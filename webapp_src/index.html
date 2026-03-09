@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MedDispenser</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --safe:#22c55e;--safe-light:#dcfce7;--safe-dark:#16a34a;
+  --warning:#eab308;--warning-light:#fef9c3;--warning-dark:#ca8a04;
+  --critical:#ef4444;--critical-light:#fee2e2;--critical-dark:#dc2626;
+  --medical:#0284c7;--medical-light:#e0f2fe;--medical-dark:#0369a1;
+  --bg:#f8fafc;--text:#1e293b;--text-light:#64748b;
+  --border:#e5e7eb;--white:#fff;
+  --gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;
+  --gray-300:#d1d5db;--gray-400:#9ca3af;--gray-500:#6b7280;
+  --gray-600:#4b5563;--gray-700:#374151;--gray-900:#111827;
+  --radius:12px;--radius-sm:8px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+#app{display:flex;min-height:100vh}
+
+/* Sidebar */
+#sidebar{width:220px;background:var(--gray-900);color:#fff;display:flex;flex-direction:column;position:fixed;height:100vh;z-index:50}
+.logo{padding:1.25rem;border-bottom:1px solid var(--gray-700);display:flex;align-items:center;gap:.75rem}
+.logo-icon{width:36px;height:36px;background:var(--medical);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.875rem}
+.logo-text{font-weight:600;font-size:1rem}
+#nav{flex:1;padding:.75rem;display:flex;flex-direction:column;gap:.25rem}
+.nav-link{display:flex;align-items:center;gap:.75rem;padding:.625rem .75rem;border-radius:var(--radius-sm);color:var(--gray-400);cursor:pointer;text-decoration:none;font-size:.875rem;transition:all .15s}
+.nav-link:hover{background:var(--gray-700);color:var(--gray-200)}
+.nav-link.active{background:var(--medical-dark);color:#fff}
+.nav-link svg{width:20px;height:20px;flex-shrink:0}
+
+/* Main */
+#main{flex:1;margin-left:220px;min-height:100vh}
+#mobile-header{display:none;background:var(--white);border-bottom:1px solid var(--border);padding:.75rem 1rem;align-items:center;justify-content:space-between}
+#mobile-header .logo-icon{width:32px;height:32px;font-size:.75rem}
+.hamburger{background:none;border:none;cursor:pointer;padding:.25rem}
+.hamburger svg{width:24px;height:24px;color:var(--gray-600)}
+#mobile-menu{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:100}
+#mobile-menu-content{background:var(--gray-900);width:260px;height:100%;padding:1rem}
+#mobile-menu .nav-link{color:var(--gray-400);margin-bottom:.25rem}
+#mobile-menu .nav-link.active{background:var(--medical-dark);color:#fff}
+#content{padding:1.5rem;max-width:1200px;margin:0 auto}
+.page-title{font-size:1.5rem;font-weight:700;margin-bottom:1.25rem}
+
+/* Cards & Grid */
+.card{background:var(--white);border-radius:var(--radius);border:1px solid var(--border);padding:1.25rem}
+.card-title{font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-light);margin-bottom:.5rem}
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}
+.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem}
+.grid-4{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}
+.mb-4{margin-bottom:1rem}
+.mb-6{margin-bottom:1.5rem}
+.mt-2{margin-top:.5rem}
+.mt-4{margin-top:1rem}
+
+/* State banner */
+.state-banner{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-radius:var(--radius);margin-bottom:1.25rem;font-weight:600;font-size:.875rem}
+.state-STANDBY{background:var(--safe-light);color:var(--safe-dark);border:1px solid var(--safe)}
+.state-WAIT_FINGER,.state-READING_VITALS,.state-DISPENSING,.state-CHECK_VITALS{background:var(--medical-light);color:var(--medical-dark);border:1px solid var(--medical)}
+.state-RESULT{background:var(--warning-light);color:var(--warning-dark);border:1px solid var(--warning)}
+.state-BLOCKED{background:var(--critical-light);color:var(--critical-dark);border:1px solid var(--critical)}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:.5rem}
+.dot-safe{background:var(--safe)}.dot-warning{background:var(--warning)}.dot-critical{background:var(--critical)}.dot-medical{background:var(--medical)}
+
+/* Metric values */
+.metric-val{font-size:1.75rem;font-weight:700;line-height:1.2}
+.metric-sub{font-size:.75rem;color:var(--text-light);margin-top:.25rem}
+.metric-sm{font-size:1.25rem}
+
+/* Progress bar */
+.progress-bg{width:100%;height:10px;background:var(--gray-200);border-radius:99px;overflow:hidden}
+.progress-fill{height:100%;border-radius:99px;transition:width .3s}
+.fill-safe{background:var(--safe)}.fill-warning{background:var(--warning)}.fill-critical{background:var(--critical)}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:.5rem 1rem;border-radius:var(--radius-sm);border:none;font-size:.875rem;font-weight:500;cursor:pointer;transition:all .15s}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--medical);color:#fff}.btn-primary:hover:not(:disabled){background:var(--medical-dark)}
+.btn-danger{background:var(--critical);color:#fff}.btn-danger:hover:not(:disabled){background:var(--critical-dark)}
+.btn-safe{background:var(--safe);color:#fff}.btn-safe:hover:not(:disabled){background:var(--safe-dark)}
+.btn-warning{background:var(--warning);color:#fff}.btn-warning:hover:not(:disabled){background:var(--warning-dark)}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text)}.btn-outline:hover:not(:disabled){background:var(--gray-50)}
+.btn-sm{padding:.375rem .75rem;font-size:.8125rem}
+.btn-block{width:100%}
+
+/* Badge */
+.badge{display:inline-block;padding:.125rem .5rem;border-radius:99px;font-size:.75rem;font-weight:600}
+.badge-safe{background:var(--safe-light);color:var(--safe-dark)}
+.badge-warning{background:var(--warning-light);color:var(--warning-dark)}
+.badge-critical{background:var(--critical-light);color:var(--critical-dark)}
+.badge-medical{background:var(--medical-light);color:var(--medical-dark)}
+.badge-gray{background:var(--gray-100);color:var(--gray-600)}
+
+/* Table */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.875rem}
+th{text-align:left;padding:.625rem .75rem;background:var(--gray-50);border-bottom:2px solid var(--border);font-weight:600;color:var(--text-light);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
+td{padding:.625rem .75rem;border-bottom:1px solid var(--border)}
+tr.disabled-row{opacity:.5}
+
+/* Toggle */
+.toggle{position:relative;width:40px;height:22px;display:inline-block;cursor:pointer}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;inset:0;background:var(--gray-300);border-radius:99px;transition:.2s}
+.toggle-slider::before{content:'';position:absolute;left:2px;bottom:2px;width:18px;height:18px;background:#fff;border-radius:50%;transition:.2s}
+.toggle input:checked+.toggle-slider{background:var(--medical)}
+.toggle input:checked+.toggle-slider::before{transform:translateX(18px)}
+
+/* Form */
+.form-group{margin-bottom:1rem}
+.form-label{display:block;font-size:.8125rem;font-weight:500;margin-bottom:.25rem;color:var(--text)}
+.form-input{width:100%;padding:.5rem .75rem;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.875rem;outline:none;transition:border .15s}
+.form-input:focus{border-color:var(--medical);box-shadow:0 0 0 3px rgba(2,132,199,.15)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+
+/* Modal */
+#modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:center;justify-content:center;padding:1rem}
+#modal-overlay.show{display:flex}
+#modal-box{background:var(--white);border-radius:var(--radius);padding:1.5rem;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
+.modal-title{font-size:1.125rem;font-weight:600;margin-bottom:1rem}
+
+/* Toast */
+#toast{position:fixed;bottom:1.5rem;right:1.5rem;padding:.75rem 1.25rem;border-radius:var(--radius-sm);color:#fff;font-size:.875rem;font-weight:500;z-index:300;transform:translateY(80px);opacity:0;transition:all .3s}
+#toast.show{transform:translateY(0);opacity:1}
+.toast-success{background:var(--safe-dark)}.toast-error{background:var(--critical-dark)}.toast-info{background:var(--medical)}
+
+/* Alert cards */
+.alert-card{display:flex;gap:.75rem;padding:1rem;border-radius:var(--radius-sm);border:1px solid var(--border);margin-bottom:.5rem;background:var(--white)}
+.alert-card.acked{opacity:.5}
+.alert-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:.25rem}
+.alert-content{flex:1;min-width:0}
+.alert-msg{font-size:.875rem;margin:.25rem 0}
+.alert-meta{font-size:.75rem;color:var(--text-light);display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}
+
+/* Filter tabs */
+.tabs{display:flex;gap:.25rem;margin-bottom:1rem;flex-wrap:wrap}
+.tab{padding:.375rem .75rem;border-radius:99px;font-size:.8125rem;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--white);color:var(--text)}
+.tab.active{background:var(--medical);color:#fff;border-color:var(--medical)}
+
+/* Tray colors */
+.tray-A{border-left:4px solid var(--medical)}
+.tray-B{border-left:4px solid var(--safe)}
+.tray-C{border-left:4px solid #8b5cf6}
+.tray-D{border-left:4px solid #f97316}
+
+/* Utility */
+.flex{display:flex}.items-center{align-items:center}.justify-between{justify-content:space-between}.gap-2{gap:.5rem}.gap-3{gap:.75rem}
+.text-center{text-align:center}.hidden{display:none!important}
+.text-safe{color:var(--safe-dark)}.text-warning{color:var(--warning-dark)}.text-critical{color:var(--critical-dark)}.text-medical{color:var(--medical-dark)}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.pulse{animation:pulse 2s infinite}
+
+/* Responsive */
+@media(max-width:768px){
+  #sidebar{display:none}
+  #main{margin-left:0}
+  #mobile-header{display:flex}
+  #content{padding:1rem}
+  .page-title{font-size:1.25rem}
+  .grid-3{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="logo">
+      <div class="logo-icon">MD</div>
+      <span class="logo-text">MedDispenser</span>
+    </div>
+    <nav id="nav">
+      <a class="nav-link active" data-page="dashboard" onclick="navigate('dashboard')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Dashboard
+      </a>
+      <a class="nav-link" data-page="schedules" onclick="navigate('schedules')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+        Schedules
+      </a>
+      <a class="nav-link" data-page="controls" onclick="navigate('controls')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Controls
+      </a>
+      <a class="nav-link" data-page="trays" onclick="navigate('trays')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27,6.96 12,12.01 20.73,6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        Trays
+      </a>
+      <a class="nav-link" data-page="alerts" onclick="navigate('alerts')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        Alerts
+        <span id="alert-badge" class="badge badge-critical" style="margin-left:auto;display:none">0</span>
+      </a>
+    </nav>
+  </aside>
+
+  <div id="main">
+    <header id="mobile-header">
+      <div class="flex items-center gap-2">
+        <div class="logo-icon">MD</div>
+        <span style="font-weight:600">MedDispenser</span>
+      </div>
+      <button class="hamburger" onclick="toggleMobileMenu()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </header>
+    <main id="content"><div class="text-center" style="padding:3rem;color:var(--text-light)">Loading...</div></main>
+  </div>
+</div>
+
+<div id="mobile-menu" onclick="closeMobileMenu(event)">
+  <div id="mobile-menu-content" onclick="event.stopPropagation()">
+    <div class="logo mb-4">
+      <div class="logo-icon">MD</div>
+      <span class="logo-text">MedDispenser</span>
+    </div>
+    <a class="nav-link" data-page="dashboard" onclick="navigate('dashboard');closeMobileMenu()">Dashboard</a>
+    <a class="nav-link" data-page="schedules" onclick="navigate('schedules');closeMobileMenu()">Schedules</a>
+    <a class="nav-link" data-page="controls" onclick="navigate('controls');closeMobileMenu()">Controls</a>
+    <a class="nav-link" data-page="trays" onclick="navigate('trays');closeMobileMenu()">Trays</a>
+    <a class="nav-link" data-page="alerts" onclick="navigate('alerts');closeMobileMenu()">Alerts</a>
+  </div>
+</div>
+
+<div id="modal-overlay" onclick="closeModal(event)">
+  <div id="modal-box" onclick="event.stopPropagation()"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// === State ===
+let currentPage='dashboard';
+let status=null;
+let schedules=[];
+let alerts=[];
+let alertId=0;
+let alertFilter='all';
+let pollTimer=null;
+let editingScheduleIndex=-1;
+
+const TRAY_CAPACITY=30;
+const TRAY_LOW=5;
+const TRAY_LETTERS=['A','B','C','D'];
+const TRAY_COLORS={A:'var(--medical)',B:'var(--safe)',C:'#8b5cf6',D:'#f97316'};
+
+// === API ===
+async function api(method,path,body){
+  const opts={method,headers:{}};
+  if(body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(body);}
+  const c=new AbortController();
+  const t=setTimeout(()=>c.abort(),5000);
+  opts.signal=c.signal;
+  try{
+    const r=await fetch(path,opts);
+    clearTimeout(t);
+    const j=await r.json();
+    if(!r.ok)throw new Error(j.error||'Request failed');
+    return j;
+  }catch(e){clearTimeout(t);throw e;}
+}
+
+// === Polling ===
+async function poll(){
+  try{
+    const [s,sc]=await Promise.all([api('GET','/status'),api('GET','/schedules')]);
+    status=s;
+    schedules=sc;
+    generateAlerts();
+    render();
+  }catch(e){
+    if(!status)render();
+  }
+}
+
+function startPolling(){
+  poll();
+  if(pollTimer)clearInterval(pollTimer);
+  pollTimer=setInterval(poll,3000);
+}
+
+// === Alerts ===
+function generateAlerts(){
+  if(!status)return;
+  if(!status.vitalsSafe&&status.heartRate>0){
+    addAlert('vitals_unsafe','Unsafe vitals detected: HR='+status.heartRate+' bpm, SpO2='+status.spo2+'%','critical');
+  }else{clearAlertType('vitals_unsafe');}
+  TRAY_LETTERS.forEach((l,i)=>{
+    const key='tray'+l;
+    if(status[key]<=TRAY_LOW){
+      addAlert('tray_low_'+l,'Tray '+l+' is low ('+status[key]+' pills remaining)','warning');
+    }else{clearAlertType('tray_low_'+l);}
+  });
+  if(status.hasDispensed&&!status.lastDispenseSuccess){
+    addAlert('dispense_failure','Pill drop not detected. Last dispense may have failed.','critical');
+  }else{clearAlertType('dispense_failure');}
+  if(status.state==='BLOCKED'){
+    addAlert('device_blocked','Device is blocked due to unsafe vitals. Reset required.','critical');
+  }else{clearAlertType('device_blocked');}
+  updateAlertBadge();
+}
+
+function addAlert(type,message,severity){
+  if(alerts.some(a=>a.type===type&&!a.acknowledged))return;
+  alerts.unshift({id:++alertId,type,message,severity,acknowledged:false,createdAt:new Date().toLocaleString()});
+  if(alerts.length>50)alerts.length=50;
+}
+
+function clearAlertType(type){
+  alerts=alerts.filter(a=>a.type!==type||a.acknowledged);
+}
+
+function updateAlertBadge(){
+  const count=alerts.filter(a=>!a.acknowledged).length;
+  const badge=document.getElementById('alert-badge');
+  if(badge){badge.textContent=count;badge.style.display=count>0?'inline-block':'none';}
+}
+
+// === Navigation ===
+function navigate(page){
+  currentPage=page;
+  location.hash=page;
+  document.querySelectorAll('.nav-link').forEach(el=>{
+    el.classList.toggle('active',el.dataset.page===page);
+  });
+  render();
+}
+
+function toggleMobileMenu(){document.getElementById('mobile-menu').style.display='flex';}
+function closeMobileMenu(e){
+  if(!e||e.target===document.getElementById('mobile-menu'))
+    document.getElementById('mobile-menu').style.display='none';
+}
+
+// === Toast ===
+function showToast(msg,type='success'){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.className='toast-'+type+' show';
+  setTimeout(()=>{t.classList.remove('show');},3000);
+}
+
+// === Modal ===
+function openModal(){document.getElementById('modal-overlay').classList.add('show');}
+function closeModal(e){
+  if(!e||e.target===document.getElementById('modal-overlay'))
+    document.getElementById('modal-overlay').classList.remove('show');
+}
+
+// === Render ===
+function render(){
+  const c=document.getElementById('content');
+  switch(currentPage){
+    case 'dashboard':c.innerHTML=renderDashboard();break;
+    case 'schedules':c.innerHTML=renderSchedules();attachScheduleHandlers();break;
+    case 'controls':c.innerHTML=renderControls();attachControlHandlers();break;
+    case 'trays':c.innerHTML=renderTrays();attachTrayHandlers();break;
+    case 'alerts':c.innerHTML=renderAlerts();attachAlertHandlers();break;
+  }
+}
+
+// === Dashboard ===
+function getStateInfo(s){
+  const m={
+    STANDBY:{label:'Standby',cls:'state-STANDBY',dot:'dot-safe'},
+    WAIT_FINGER:{label:'Waiting for Finger',cls:'state-WAIT_FINGER',dot:'dot-medical'},
+    READING_VITALS:{label:'Reading Vitals',cls:'state-READING_VITALS',dot:'dot-medical'},
+    CHECK_VITALS:{label:'Checking Vitals',cls:'state-CHECK_VITALS',dot:'dot-medical'},
+    DISPENSING:{label:'Dispensing',cls:'state-DISPENSING',dot:'dot-medical'},
+    RESULT:{label:'Result',cls:'state-RESULT',dot:'dot-warning'},
+    BLOCKED:{label:'Blocked',cls:'state-BLOCKED',dot:'dot-critical'}
+  };
+  return m[s]||{label:s,cls:'state-STANDBY',dot:'dot-safe'};
+}
+
+function fillPct(count){return Math.round((count/TRAY_CAPACITY)*100);}
+function fillClass(count){
+  const p=fillPct(count);
+  return p<=15?'fill-critical':p<=40?'fill-warning':'fill-safe';
+}
+
+function renderDashboard(){
+  if(!status)return '<div class="text-center" style="padding:3rem;color:var(--text-light)"><div class="pulse">Connecting to device...</div></div>';
+  const si=getStateInfo(status.state);
+  const nd=status.nextDose;
+  const unacked=alerts.filter(a=>!a.acknowledged);
+  return `
+    <h1 class="page-title">Device Dashboard</h1>
+    <div class="state-banner ${si.cls}">
+      <div><span class="dot ${si.dot}"></span>${si.label}</div>
+      <div>${status.deviceTime||'--:--:--'}</div>
+    </div>
+    <div class="grid-3 mb-6">
+      <div class="card">
+        <div class="card-title">Next Scheduled Dose</div>
+        <div class="metric-val metric-sm">${nd?pad(nd.hour)+':'+pad(nd.minute):'No schedules'}</div>
+        ${nd?'<div class="metric-sub">'+trayBadges(nd)+'</div>':''}
+      </div>
+      <div class="card">
+        <div class="card-title">Last Dispense</div>
+        <div class="metric-val metric-sm">${status.hasDispensed?status.lastDispenseTime:'None yet'}</div>
+        ${status.hasDispensed?'<div class="metric-sub"><span class="badge '+(status.lastDispenseSuccess?'badge-safe">Success':'badge-critical">Failed')+'</span></div>':''}
+      </div>
+      <div class="card">
+        <div class="card-title">Heart Rate</div>
+        <div class="metric-val ${status.heartRate>0&&!status.vitalsSafe?'text-critical':''}">${status.heartRate>0?status.heartRate:'--'}</div>
+        <div class="metric-sub">${status.heartRate>0?'bpm'+(status.vitalsSafe?' - Normal':' - Abnormal'):'Awaiting reading'}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">SpO2</div>
+        <div class="metric-val ${status.spo2>0&&status.spo2<90?'text-critical':''}">${status.spo2>0?status.spo2+'%':'--'}</div>
+        <div class="metric-sub">${status.spo2>0?(status.spo2>=90?'Normal':'Below threshold'):'Awaiting reading'}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Active Alerts</div>
+        <div class="metric-val ${unacked.length>0?'text-critical':''}">${unacked.length}</div>
+        <div class="metric-sub">${unacked.length>0?unacked.slice(0,2).map(a=>'<div style="margin-top:.25rem;font-size:.75rem">'+a.message.substring(0,50)+'</div>').join(''):'No active alerts'}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Device Time</div>
+        <div class="metric-val metric-sm">${status.deviceTime||'--:--:--'}</div>
+        <div class="metric-sub">ESP32 RTC clock</div>
+      </div>
+    </div>
+    <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:.75rem">Tray Levels</h2>
+    <div class="grid-4">
+      ${TRAY_LETTERS.map(l=>{
+        const count=status['tray'+l];
+        const pct=fillPct(count);
+        return `<div class="card tray-${l}">
+          <div class="flex justify-between items-center mb-4">
+            <span style="font-weight:600">Tray ${l}</span>
+            ${count<=TRAY_LOW?'<span class="badge badge-warning">LOW</span>':''}
+          </div>
+          <div class="progress-bg"><div class="progress-fill ${fillClass(count)}" style="width:${pct}%"></div></div>
+          <div class="flex justify-between mt-2" style="font-size:.75rem;color:var(--text-light)">
+            <span>${count} / ${TRAY_CAPACITY}</span><span>${pct}%</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function pad(n){return String(n).padStart(2,'0');}
+function trayBadges(s){
+  return TRAY_LETTERS.filter(l=>s['tray'+l]>0).map(l=>'<span class="badge badge-medical" style="margin-right:.25rem">'+l+': '+s['tray'+l]+'</span>').join('')||'No pills';
+}
+
+// === Schedules ===
+function renderSchedules(){
+  return `
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="page-title" style="margin-bottom:0">Schedules</h1>
+      <button class="btn btn-primary" onclick="openScheduleModal(-1)" ${schedules.length>=10?'disabled':''}>+ Add Schedule</button>
+    </div>
+    ${schedules.length===0?'<div class="card text-center" style="padding:2rem;color:var(--text-light)">No schedules configured. Click "Add Schedule" to create one.</div>':''}
+    ${schedules.length>0?`<div class="card table-wrap"><table>
+      <thead><tr><th>Time</th><th>Tray A</th><th>Tray B</th><th>Tray C</th><th>Tray D</th><th>Enabled</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${schedules.map((s,i)=>`<tr class="${s.enabled===false?'disabled-row':''}">
+          <td style="font-weight:600">${pad(s.hour)}:${pad(s.minute)}</td>
+          <td>${pillBadge(s.trayA)}</td><td>${pillBadge(s.trayB)}</td><td>${pillBadge(s.trayC)}</td><td>${pillBadge(s.trayD)}</td>
+          <td><label class="toggle"><input type="checkbox" ${s.enabled!==false?'checked':''} data-toggle="${s.index}"><span class="toggle-slider"></span></label></td>
+          <td><button class="btn btn-outline btn-sm" onclick="openScheduleModal(${s.index})">Edit</button> <button class="btn btn-danger btn-sm" data-delete="${s.index}">Del</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`:''}`;
+}
+
+function pillBadge(n){return n>0?'<span class="badge badge-medical">'+n+'</span>':'<span style="color:var(--gray-400)">0</span>';}
+
+function attachScheduleHandlers(){
+  document.querySelectorAll('[data-toggle]').forEach(el=>{
+    el.addEventListener('change',async function(){
+      const idx=parseInt(this.dataset.toggle);
+      try{await api('POST','/schedules/toggle',{index:idx});await poll();showToast('Schedule updated');}
+      catch(e){showToast(e.message,'error');await poll();}
+    });
+  });
+  document.querySelectorAll('[data-delete]').forEach(el=>{
+    el.addEventListener('click',async function(){
+      const idx=parseInt(this.dataset.delete);
+      if(!confirm('Delete this schedule?'))return;
+      try{await api('DELETE','/schedules?index='+idx);await poll();showToast('Schedule deleted');}
+      catch(e){showToast(e.message,'error');}
+    });
+  });
+}
+
+function openScheduleModal(idx){
+  editingScheduleIndex=idx;
+  const s=idx>=0?schedules.find(x=>x.index===idx):null;
+  document.getElementById('modal-box').innerHTML=`
+    <div class="modal-title">${s?'Edit':'Add'} Schedule</div>
+    <form id="schedule-form">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Hour (0-23)</label><input class="form-input" id="sf-hour" type="number" min="0" max="23" value="${s?s.hour:8}" required></div>
+        <div class="form-group"><label class="form-label">Minute (0-59)</label><input class="form-input" id="sf-min" type="number" min="0" max="59" value="${s?s.minute:0}" required></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Tray A pills</label><input class="form-input" id="sf-a" type="number" min="0" max="10" value="${s?s.trayA:0}"></div>
+        <div class="form-group"><label class="form-label">Tray B pills</label><input class="form-input" id="sf-b" type="number" min="0" max="10" value="${s?s.trayB:0}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Tray C pills</label><input class="form-input" id="sf-c" type="number" min="0" max="10" value="${s?s.trayC:0}"></div>
+        <div class="form-group"><label class="form-label">Tray D pills</label><input class="form-input" id="sf-d" type="number" min="0" max="10" value="${s?s.trayD:0}"></div>
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button type="submit" class="btn btn-primary btn-block">Save</button>
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      </div>
+    </form>`;
+  openModal();
+  document.getElementById('schedule-form').addEventListener('submit',async function(e){
+    e.preventDefault();
+    const data={
+      hour:parseInt(document.getElementById('sf-hour').value),
+      minute:parseInt(document.getElementById('sf-min').value),
+      trayA:parseInt(document.getElementById('sf-a').value)||0,
+      trayB:parseInt(document.getElementById('sf-b').value)||0,
+      trayC:parseInt(document.getElementById('sf-c').value)||0,
+      trayD:parseInt(document.getElementById('sf-d').value)||0
+    };
+    if(data.trayA+data.trayB+data.trayC+data.trayD===0){showToast('At least one tray must have pills','error');return;}
+    try{
+      if(editingScheduleIndex>=0){
+        await api('DELETE','/schedules?index='+editingScheduleIndex);
+      }
+      await api('POST','/schedules',data);
+      closeModal();
+      await poll();
+      showToast(editingScheduleIndex>=0?'Schedule updated':'Schedule added');
+    }catch(e){showToast(e.message,'error');}
+  });
+}
+
+// === Controls ===
+function renderControls(){
+  const s=status;
+  const si=s?getStateInfo(s.state):{label:'Unknown',cls:'state-STANDBY'};
+  return `
+    <h1 class="page-title">Device Controls</h1>
+    ${s?`<div class="state-banner ${si.cls} mb-6"><div><span class="dot ${si.dot}"></span>Current State: ${si.label}</div></div>`:''}
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-title">Reset Device</div>
+        <p style="font-size:.875rem;color:var(--text-light);margin-bottom:1rem">Reset the device from BLOCKED state back to STANDBY.</p>
+        <button class="btn btn-danger btn-block" id="btn-reset" ${!s||s.state!=='BLOCKED'?'disabled':''}>Reset Device</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Manual Dispense</div>
+        <p style="font-size:.875rem;color:var(--text-light);margin-bottom:.75rem">Dispense pills manually (skips vitals check).</p>
+        <div class="form-row mb-4">
+          <div class="form-group"><label class="form-label">Tray A</label><input class="form-input" id="md-a" type="number" min="0" max="10" value="0"></div>
+          <div class="form-group"><label class="form-label">Tray B</label><input class="form-input" id="md-b" type="number" min="0" max="10" value="0"></div>
+        </div>
+        <div class="form-row mb-4">
+          <div class="form-group"><label class="form-label">Tray C</label><input class="form-input" id="md-c" type="number" min="0" max="10" value="0"></div>
+          <div class="form-group"><label class="form-label">Tray D</label><input class="form-input" id="md-d" type="number" min="0" max="10" value="0"></div>
+        </div>
+        <button class="btn btn-primary btn-block" id="btn-dispense" ${!s||s.state!=='STANDBY'?'disabled':''}>Dispense Now</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Sync Device Clock</div>
+        <div style="font-size:.875rem;margin-bottom:.75rem">
+          <div class="flex justify-between mb-4"><span style="color:var(--text-light)">Device:</span><span style="font-weight:600">${s?s.deviceTime:'--:--:--'}</span></div>
+          <div class="flex justify-between mb-4"><span style="color:var(--text-light)">Browser:</span><span style="font-weight:600" id="browser-time">${new Date().toLocaleTimeString()}</span></div>
+        </div>
+        <button class="btn btn-primary btn-block" id="btn-sync">Sync Clock</button>
+        <button class="btn btn-outline btn-block mt-2" id="btn-vitals" ${!s||s.state!=='STANDBY'?'disabled':''}>Read Vitals</button>
+      </div>
+    </div>`;
+}
+
+function attachControlHandlers(){
+  const br=document.getElementById('btn-reset');
+  if(br)br.addEventListener('click',async()=>{
+    try{await api('POST','/reset');showToast('Device reset to STANDBY');await poll();}
+    catch(e){showToast(e.message,'error');}
+  });
+  const bd=document.getElementById('btn-dispense');
+  if(bd)bd.addEventListener('click',async()=>{
+    const data={
+      trayA:parseInt(document.getElementById('md-a').value)||0,
+      trayB:parseInt(document.getElementById('md-b').value)||0,
+      trayC:parseInt(document.getElementById('md-c').value)||0,
+      trayD:parseInt(document.getElementById('md-d').value)||0
+    };
+    if(data.trayA+data.trayB+data.trayC+data.trayD===0){showToast('Enter at least one pill','error');return;}
+    try{await api('POST','/manual-dispense',data);showToast('Dispensing...');await poll();}
+    catch(e){showToast(e.message,'error');}
+  });
+  const bs=document.getElementById('btn-sync');
+  if(bs)bs.addEventListener('click',async()=>{
+    const now=new Date();
+    try{
+      await api('POST','/sync-time',{year:now.getFullYear(),month:now.getMonth()+1,day:now.getDate(),hour:now.getHours(),minute:now.getMinutes(),second:now.getSeconds()});
+      showToast('Clock synced');await poll();
+    }catch(e){showToast(e.message,'error');}
+  });
+  const bv=document.getElementById('btn-vitals');
+  if(bv)bv.addEventListener('click',async()=>{
+    try{await api('POST','/read-vitals');showToast('Vitals reading initiated...');await poll();}
+    catch(e){showToast(e.message,'error');}
+  });
+  // Update browser time every second
+  setInterval(()=>{const el=document.getElementById('browser-time');if(el)el.textContent=new Date().toLocaleTimeString();},1000);
+}
+
+// === Trays ===
+function renderTrays(){
+  if(!status)return '<div class="text-center" style="padding:3rem;color:var(--text-light)">Connecting...</div>';
+  return `
+    <h1 class="page-title">Tray Management</h1>
+    <div class="grid-2">
+      ${TRAY_LETTERS.map(l=>{
+        const count=status['tray'+l];
+        const pct=fillPct(count);
+        return `<div class="card tray-${l}">
+          <div class="flex justify-between items-center mb-4">
+            <div><span style="font-size:1.125rem;font-weight:700">Tray ${l}</span></div>
+            ${count<=TRAY_LOW?'<span class="badge badge-warning">LOW</span>':'<span class="badge badge-safe">OK</span>'}
+          </div>
+          <div class="progress-bg" style="height:14px"><div class="progress-fill ${fillClass(count)}" style="width:${pct}%"></div></div>
+          <div class="flex justify-between mt-2" style="font-size:.8125rem;color:var(--text-light)">
+            <span>${count} / ${TRAY_CAPACITY} pills</span><span>${pct}%</span>
+          </div>
+          <div style="font-size:.75rem;color:var(--text-light);margin-top:.25rem">Low threshold: ${TRAY_LOW} pills</div>
+          <div class="mt-4">
+            <button class="btn btn-safe btn-block btn-sm" data-refill="${l}">Mark Refilled</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function attachTrayHandlers(){
+  document.querySelectorAll('[data-refill]').forEach(el=>{
+    el.addEventListener('click',async function(){
+      const tray=this.dataset.refill;
+      try{await api('POST','/trays/refill',{tray});showToast('Tray '+tray+' refilled');await poll();}
+      catch(e){showToast(e.message,'error');}
+    });
+  });
+}
+
+// === Alerts ===
+function renderAlerts(){
+  const filtered=alertFilter==='all'?alerts:alerts.filter(a=>a.severity===alertFilter);
+  const unacked=alerts.filter(a=>!a.acknowledged).length;
+  return `
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="page-title" style="margin-bottom:0">Alerts</h1>
+      ${unacked>0?'<button class="btn btn-outline btn-sm" id="btn-ack-all">Acknowledge All</button>':''}
+    </div>
+    <div class="tabs">
+      ${['all','critical','warning','info'].map(f=>`<span class="tab ${alertFilter===f?'active':''}" data-filter="${f}">${f.charAt(0).toUpperCase()+f.slice(1)}</span>`).join('')}
+    </div>
+    ${filtered.length===0?'<div class="card text-center" style="padding:2rem;color:var(--text-light)">No alerts</div>':''}
+    ${filtered.map(a=>`
+      <div class="alert-card ${a.acknowledged?'acked':''}">
+        <div class="alert-dot" style="background:${a.severity==='critical'?'var(--critical)':a.severity==='warning'?'var(--warning)':'var(--medical)'}"></div>
+        <div class="alert-content">
+          <div class="flex items-center gap-2">
+            <span class="badge badge-${a.severity==='critical'?'critical':a.severity==='warning'?'warning':'medical'}">${a.severity}</span>
+            <span style="font-size:.75rem;color:var(--text-light)">${a.type.replace(/_/g,' ')}</span>
+          </div>
+          <div class="alert-msg">${a.message}</div>
+          <div class="alert-meta"><span>${a.createdAt}</span></div>
+        </div>
+        ${!a.acknowledged?'<button class="btn btn-outline btn-sm" data-ack="'+a.id+'" style="align-self:start">Ack</button>':''}
+      </div>
+    `).join('')}`;
+}
+
+function attachAlertHandlers(){
+  document.querySelectorAll('[data-ack]').forEach(el=>{
+    el.addEventListener('click',function(){
+      const id=parseInt(this.dataset.ack);
+      const a=alerts.find(x=>x.id===id);
+      if(a)a.acknowledged=true;
+      updateAlertBadge();
+      render();
+    });
+  });
+  document.querySelectorAll('[data-filter]').forEach(el=>{
+    el.addEventListener('click',function(){
+      alertFilter=this.dataset.filter;
+      render();
+    });
+  });
+  const btnAll=document.getElementById('btn-ack-all');
+  if(btnAll)btnAll.addEventListener('click',()=>{
+    alerts.forEach(a=>{a.acknowledged=true;});
+    updateAlertBadge();
+    render();
+  });
+}
+
+// === Init ===
+window.addEventListener('load',()=>{
+  const hash=location.hash.slice(1);
+  if(['dashboard','schedules','controls','trays','alerts'].includes(hash))currentPage=hash;
+  document.querySelectorAll('.nav-link').forEach(el=>{
+    el.classList.toggle('active',el.dataset.page===currentPage);
+  });
+  startPolling();
+});
+</script>
+</body>
+</html>

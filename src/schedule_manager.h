@@ -16,6 +16,7 @@ struct MedicineSchedule
     int trayD;
 
     bool executed;
+    bool enabled;
 };
 
 class ScheduleManager
@@ -48,6 +49,8 @@ public:
 
     bool getNextSchedule(RTCManager &rtc,
                          MedicineSchedule &nextSchedule);
+
+    bool toggleSchedule(int index);
 
 };
 

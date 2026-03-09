@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <LittleFS.h>
 
 #include "config.h"
 #include "rtc_manager.h"
@@ -68,6 +69,13 @@ void setup()
     Serial.println(WIFI_AP_SSID);
     Serial.print("AP IP: ");
     Serial.println(WiFi.softAPIP());
+
+    // Initialize LittleFS for serving web files
+    if(!LittleFS.begin(true)) {
+        Serial.println("LittleFS mount failed");
+    } else {
+        Serial.println("LittleFS mounted");
+    }
 
     // Initialize hardware
     rtc.begin();
@@ -138,7 +146,7 @@ void loop()
             stateEnteredAt = now;
 
             // Clear dueSchedule so vitals-only read doesn't trigger dispense
-            dueSchedule = {0, 0, 0, 0, 0, 0, false};
+            dueSchedule = {0, 0, 0, 0, 0, 0, false, true};
             break;
         }
 
@@ -231,7 +239,7 @@ void loop()
         // Show result for 3 seconds
         if(now - stateEnteredAt >= 3000)
         {
-            dueSchedule = {0, 0, 0, 0, 0, 0, false};
+            dueSchedule = {0, 0, 0, 0, 0, 0, false, true};
             state = STANDBY;
             stateEnteredAt = now;
         }

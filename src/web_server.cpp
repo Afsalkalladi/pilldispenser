@@ -1,6 +1,7 @@
 #include "web_server.h"
 #include <ArduinoJson.h>
 #include <Arduino.h>
+#include <LittleFS.h>
 
 AsyncWebServer server(80);
 
@@ -58,6 +59,19 @@ void setupWebServer()
         doc["trayC"] = trayPills[2];
         doc["trayD"] = trayPills[3];
 
+        // Next scheduled dose
+        MedicineSchedule next;
+        if(scheduleManager.getNextSchedule(rtc, next))
+        {
+            JsonObject nextDose = doc["nextDose"].to<JsonObject>();
+            nextDose["hour"] = next.hour;
+            nextDose["minute"] = next.minute;
+            nextDose["trayA"] = next.trayA;
+            nextDose["trayB"] = next.trayB;
+            nextDose["trayC"] = next.trayC;
+            nextDose["trayD"] = next.trayD;
+        }
+
         String response;
         serializeJson(doc, response);
         request->send(200, "application/json", response);
@@ -80,6 +94,7 @@ void setupWebServer()
             obj["trayB"] = s.trayB;
             obj["trayC"] = s.trayC;
             obj["trayD"] = s.trayD;
+            obj["enabled"] = s.enabled;
         }
 
         String response;
@@ -149,6 +164,32 @@ void setupWebServer()
         if(scheduleManager.removeSchedule(index))
         {
             Serial.printf("Schedule %d removed\n", index);
+            request->send(200, "application/json", "{\"success\":true}");
+        }
+        else
+        {
+            request->send(404, "application/json", "{\"error\":\"Invalid index\"}");
+        }
+    });
+
+    // POST /schedules/toggle
+    server.on("/schedules/toggle", HTTP_POST, [](AsyncWebServerRequest *request){
+        request->send(400, "application/json", "{\"error\":\"Body required\"}");
+    }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, data, len);
+
+        if(error)
+        {
+            request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+            return;
+        }
+
+        int idx = doc["index"] | -1;
+
+        if(scheduleManager.toggleSchedule(idx))
+        {
             request->send(200, "application/json", "{\"success\":true}");
         }
         else
@@ -326,6 +367,9 @@ void setupWebServer()
 
         request->send(200, "application/json", "{\"success\":true}");
     });
+
+    // Serve SPA from LittleFS (index.html or index.html.gz)
+    server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 
     server.begin();
     Serial.println("Web server started on port 80");

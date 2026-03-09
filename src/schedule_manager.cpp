@@ -22,6 +22,7 @@ void ScheduleManager::addSchedule(int hour, int minute,
     schedules[scheduleCount].trayD = d;
 
     schedules[scheduleCount].executed = false;
+    schedules[scheduleCount].enabled = true;
 
     scheduleCount++;
 }
@@ -72,7 +73,7 @@ bool ScheduleManager::checkSchedule(RTCManager &rtc,
     for(int i=0;i<scheduleCount;i++)
     {
 
-        if(!schedules[i].executed)
+        if(!schedules[i].executed && schedules[i].enabled)
         {
 
             if(now.hour() == schedules[i].hour &&
@@ -108,6 +109,8 @@ bool ScheduleManager::getNextSchedule(RTCManager &rtc,
     for(int i=0;i<scheduleCount;i++)
     {
 
+        if(!schedules[i].enabled) continue;
+
         int schedMinutes =
             schedules[i].hour*60 +
             schedules[i].minute;
@@ -127,4 +130,12 @@ bool ScheduleManager::getNextSchedule(RTCManager &rtc,
     }
 
     return found;
+}
+
+bool ScheduleManager::toggleSchedule(int index)
+{
+    if(index < 0 || index >= scheduleCount)
+        return false;
+    schedules[index].enabled = !schedules[index].enabled;
+    return true;
 }
